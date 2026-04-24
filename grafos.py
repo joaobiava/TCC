@@ -145,7 +145,7 @@ def session_interaction(df):
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("clicks_hour_000.csv")
+    df = pd.read_csv("./clicks/clicks_hour_000.csv")
     #users_items(df)
     #users_sessions_items(df)
     #devices_users(df)
