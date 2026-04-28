@@ -45,7 +45,10 @@ print(f"media de iterações por sessao: {media_iteracoes_sessoes}")
 mediana_iteracoes_sessoes = df_final.groupby('session_id')['session_size'].first().median()
 print(f"mediana de iterações por sessao: {mediana_iteracoes_sessoes}")
 
-# só pra ordenar o dataset pelo timestamp das sessões (incrédulo com a quantidade de iterações em tão pouco tempo)
+max_iteracoes_sessoes = df_final.groupby('session_id')['session_size'].first().max()
+print(f"maximo de iterações por sessao: {max_iteracoes_sessoes}")
+
+# so pra ordenar o dataset pelo timestamp das sessões (incrédulo com a quantidade de iterações em tão pouco tempo)
 df_final['session_start'] = pd.to_datetime(df_final['session_start'], unit='ms')
 df_final = df_final.sort_values(by='session_start')
 # 2017-10-01 02:37:03 (primeira sessão do dataset)
