@@ -15,9 +15,26 @@ arquivos = glob.glob(os.path.join(pasta, "*.csv"))
 list_df = [pd.read_csv(arquivo) for arquivo in arquivos]
 df_final = pd.concat(list_df , ignore_index=True)
 
+set_A = set(df_final['user_id'])
+set_B = set(df_final['click_article_id'])
+
+# Encontra a interseção (valores presentes em ambos)
+valores_comuns = set_A.intersection(set_B)
+
+if valores_comuns:
+    print(f"Foram encontrados {len(valores_comuns)} valores em comum.")
+else:
+    print("As colunas são disjuntas (não possuem valores em comum).")
+
 # Quantidade de usuários únicos
 num_usuarios = df_final['user_id'].nunique()
 print(f"Quantidade de usuários: {num_usuarios}")
+
+num_devices = df_final['click_deviceGroup'].nunique()
+print(f"Quantidade de devices: {num_devices}")
+
+num_regions = df_final['click_region'].nunique()
+print(f"Quantidade de regioes: {num_regions}")
 
 # Quantidade de itens (artigos) diferentes
 num_itens = df_final['click_article_id'].nunique()
