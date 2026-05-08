@@ -9,10 +9,10 @@ nao tem nenhum valor nulo
 """
 
 #df = pd.read_csv("./clicks/clicks_hour_000.csv")
-pasta = '/home/jaba/Documentos/TCC/clicks'
-arquivos = glob.glob(os.path.join(pasta, "*.csv"))
+path = '/home/jaba/Documentos/TCC/clicks'
+files = glob.glob(os.path.join(path, "*.csv"))
 
-list_df = [pd.read_csv(arquivo) for arquivo in arquivos]
+list_df = [pd.read_csv(file) for file in files]
 df_final = pd.concat(list_df , ignore_index=True)
 
 set_A = set(df_final['user_id'])
@@ -70,6 +70,5 @@ df_final['session_start'] = pd.to_datetime(df_final['session_start'], unit='ms')
 df_final = df_final.sort_values(by='session_start')
 # 2017-10-01 02:37:03 (primeira sessão do dataset)
 # 2017-10-17 03:36:19 (ultima sessão do dataset)
-
 
 print(df_final)

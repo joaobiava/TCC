@@ -8,13 +8,13 @@ import sys
 import time
 import pickle
 
-def salvar_grafo(G, caminho):
-    with open(caminho, 'wb') as f:
+def save_graph(G, path):
+    with open(path, 'wb') as f:
         pickle.dump(G, f)
-        print(f"Grafo salvo em {caminho}")
+        print(f"Grafo salvo em {path}")
 
-def carregar_grafo(caminho):
-    with open(caminho, 'rb') as f:
+def load_graph(path):
+    with open(path, 'rb') as f:
         G = pickle.load(f)
         print(f"Grafo carregado {G}")
         return G
@@ -24,7 +24,7 @@ grafo bipartido (users + items)
 faz de um jeito mais fofoinho liberando a memoria do csv, nao deixando carregar tudo de uma vez
 + otimizcao de memoria utilizando dtype, q permite diminuir o tamanho da memoria padrao que o pandas utiliza
 """
-def users_items_intertuples(arquivos):
+def users_items_itertuples(arquivos):
     G = nx.Graph()
 
     # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
@@ -46,7 +46,13 @@ def users_items_intertuples(arquivos):
     return G
    # deu certo e com a quantidade certas de nos totais
 
-def users_items_sessions_devices_regions_intertuples(arquivos):
+"""
+grafo multipartido (users + sessions + items + devices + regions)
+tem o jeito de liberar a memória conforme usa o csv, nao deixando carregar tudo na memoria de uma vez;
+faz diferenciação dos nós coloacando uma letra antes de cada no para nao ocorrer duplicacao de nos
+
+"""
+def users_items_sessions_devices_regions_itertuples(arquivos):
     G = nx.Graph()
 
     # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
@@ -81,17 +87,16 @@ def users_items_sessions_devices_regions_intertuples(arquivos):
    # aparentemente deu certo
 
 
-def recomendar_com_rwr(G: Graph, user_id, top_k, nao_alpha=0.2):
+def recommend_with_rwr(G: Graph, user_id, top_k, beta=0.2):
     if user_id not in G:
         print(f"Usuário {user_id} não encontrado no grafo.")
         return []
 
     # so o user alvo recebe peso 1
-    personalization_target_user = {node: 0 for node in G.nodes()}
-    personalization_target_user[user_id] = 1
+    personalization_target_user = {user_id: 1}
 
     # RWR
-    scores = nx.pagerank(G, alpha=1 - nao_alpha, personalization=personalization_target_user, max_iter=200)
+    scores = nx.pagerank(G, alpha=1 - beta, personalization=personalization_target_user, max_iter=200)
 
     target_user_neighbors = list(G.neighbors(user_id))
     is_session = any(G.nodes[v].get('tipo') == 'session' for v in target_user_neighbors)
@@ -121,48 +126,48 @@ def recomendar_com_rwr(G: Graph, user_id, top_k, nao_alpha=0.2):
 
 
 if __name__ == "__main__":
-    caminho_grafo_simples = '/home/jaba/Documentos/TCC/grafo_simples'
-    caminho_grafo_completo = '/home/jaba/Documentos/TCC/grafo_completo'
-    pasta = '/home/jaba/Documentos/TCC/clicks'
-    arquivos = glob.glob(os.path.join(pasta, "*.csv"))
+    path_simple_graph = '/home/jaba/Documentos/TCC/grafo_simples'
+    path_complete_graph = '/home/jaba/Documentos/TCC/grafo_completo'
+    folder = '/home/jaba/Documentos/TCC/clicks'
+    files = glob.glob(os.path.join(folder, "*.csv"))
 
     # funfou essa parte de carregar o grafo
-    # if os.path.exists(caminho_grafo_simples):
-    #     G = carregar_grafo(caminho_grafo_simples)
-    # else:
-    #     #execucao com liberacao de memoria
-    #     inicio = time.perf_counter()
-    #     G = users_items_intertuples(arquivos)
-    #     fim = time.perf_counter()
-    #     print(f"funcao users_items_intertuples demorou {fim - inicio} segundos")
-    #     salvar_grafo(G, caminho_grafo_simples)
-
-    # #executa rwr no grafo mais simples (users + items)
-    # inicio = time.perf_counter()
-    # recomendacoes = recomendar_com_rwr(G, user_id="u_0", top_k=10)
-    # print(f"Recomendações para usuário 0:")
-    # for artigo, score in recomendacoes:
-    #     print(f"\tArtigo {artigo} — score: {score}")
-    # fim = time.perf_counter()
-    # print(f"funcao rwr demorou {fim - inicio} segundos")
-
-    # sys.exit(0)
-
-    #execucao liberando memoria (campos escolhidos pro grafo final)
-    if os.path.exists(caminho_grafo_completo):
-        G = carregar_grafo(caminho_grafo_completo)
+    if os.path.exists(path_simple_graph):
+        G = load_graph(path_simple_graph)
     else:
         #execucao com liberacao de memoria
         inicio = time.perf_counter()
-        G = users_items_sessions_devices_regions_intertuples(arquivos)
+        G = users_items_itertuples(files)
         fim = time.perf_counter()
-        print(f"funcao users_items_sessions_localizations_devices_intertuples demorou {fim - inicio} segundos")
-        salvar_grafo(G, caminho_grafo_completo)
+        print(f"funcao users_items_itertuples demorou {fim - inicio} segundos")
+        save_graph(G, path_simple_graph)
+
+    #executa rwr no grafo mais simples (users + items)
+    inicio = time.perf_counter()
+    recomendacoes = recommend_with_rwr(G, user_id="u_1709", top_k=20)
+    print(f"Recomendações para usuário 1709:")
+    for artigo, score in recomendacoes:
+        print(f"\tArtigo {artigo} — score: {score}")
+    fim = time.perf_counter()
+    print(f"funcao rwr demorou {fim - inicio} segundos")
+
+    sys.exit(0)
+
+    #execucao liberando memoria (campos escolhidos pro grafo final)
+    if os.path.exists(path_complete_graph):
+        G = load_graph(path_complete_graph)
+    else:
+        #execucao com liberacao de memoria
+        inicio = time.perf_counter()
+        G = users_items_sessions_devices_regions_itertuples(files)
+        fim = time.perf_counter()
+        print(f"funcao users_items_sessions_localizations_devices_itertuples demorou {fim - inicio} segundos")
+        save_graph(G, path_complete_graph)
         
     # executa rwr no grafo mais complexo
     inicio = time.perf_counter()
-    recommendations = recomendar_com_rwr(G, user_id="u_0", top_k=20)
-    print(f"Recomendações para usuário u_0:")
+    recommendations = recommend_with_rwr(G, user_id="u_1709", top_k=20)
+    print(f"Recomendações para usuário u_1709:")
     for artigo, score in recommendations:
         print(f"\tArtigo {artigo} — score: {score}")
     fim = time.perf_counter()
