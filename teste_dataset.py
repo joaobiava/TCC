@@ -69,6 +69,11 @@ print(f"maximo de iterações por sessao: {max_iteracoes_sessoes}")
 df_final['session_start'] = pd.to_datetime(df_final['session_start'], unit='ms')
 df_final = df_final.sort_values(by='session_start')
 # 2017-10-01 02:37:03 (primeira sessão do dataset)
-# 2017-10-17 03:36:19 (ultima sessão do dataset)
+# 2017-10-17 03:36:19 (ultima sessão do dataset) talvez seja oned o utlimo user foi criado
 
-print(df_final)
+df_final['click_timestamp'] = pd.to_datetime(df_final['click_timestamp'], unit='ms')
+df_final = df_final.sort_values(by='click_timestamp')
+#  2017-10-01 03:00:00.026 (primeiro click no sistema)
+# 2017-11-13 20:04:14.886 (ultimo click do sistema)
+
+print(df_final['click_timestamp'])
