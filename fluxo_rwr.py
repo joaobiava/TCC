@@ -35,12 +35,15 @@ def users_items_itertuples(arquivos):
 
             G.add_node(user, subset=0, tipo="user")
             G.add_node(item, subset=1, tipo="item")
+            # coloca como atributo da aresta para que o timestamp seja atribuido a interação e nao ao item
             G.add_edge(user, item, timestamp=ts)
 
         del df
     print(G)
     return G
 
+"""pelo o que eu vi, esse é o melhor jeito de se fazer pq ocupa menos espaco e eh mais rapido
+tinha feito um jeito antes que criava um grafo novo, mas ficava mais demorado e tals"""
 def build_subGraph(G: Graph, current_time, time_window):
     lower_limit = current_time - time_window
 
@@ -52,15 +55,8 @@ def build_subGraph(G: Graph, current_time, time_window):
 
     return sub_graph
 
-    # for u, v, data in G.edges(data=True):
-    #     ts = data.get('timestamp')
-
-    #     if ts is not None and ts >= lower_limit:
-    #        sub_graph.add_edge(u, v, **data)
-    #        sub_graph.nodes[u].update(G.nodes[u])
-    #        sub_graph.nodes[v].update(G.nodes[v])
-    # return sub_graph
-
+"""pelo o que eu vi, esse é o melhor jeito de se fazer pq ocupa menos espaco e eh mais rapido
+o jeito comentado criava um grafo novo, o que demora mais tempo"""
 def update_clicked(G, clicked, user_id, current_time):
     # pra agora isso aqui nao vai servir, só pra depois talvez
     # target_user_neighbors = list(G.neighbors(user_id))
@@ -76,7 +72,7 @@ def update_clicked(G, clicked, user_id, current_time):
     #     for neighbors in G.neighbors(user_id):
     #         if G.nodes[neighbors].get('tipo') == 'item' and G.edges[neighbors].get('timestamp') <= current_time:
     #             clicked.add(neighbors)
-    for neighbors in G.neighbors(user_id):
+    for neighbors in G.neighbors(user_id):  
             if G.nodes[neighbors].get('tipo') == 'item':
                 clicked.add(neighbors)
 
@@ -89,7 +85,7 @@ def recommend_with_rwr_timeWindow(G: Graph, clicked, user_id, top_k, beta):
     personalization_target_user = {user_id: 1}
 
     # RWR
-    scores = nx.pagerank(G, alpha=1 - beta, personalization=personalization_target_user, max_iter=200)
+    scores = nx.pagerank(G, alpha=1 - beta, personalization=personalization_target_user)
     
     # Filtra itens q o usuario ainda n viu
     recommendations = []
@@ -108,14 +104,15 @@ if __name__ == "__main__":
     folder = '/home/jaba/Documentos/TCC/clicks'
     files = glob.glob(os.path.join(folder, "*.csv"))
 
+    #deixei umas config global aq, mais facil
     USER_ID = "u_0"
     TOP_K = 10
     MS_DAY = 1000 * 60 * 60 * 24  # 1 dia em timestamp
-    time_window = MS_DAY
+    time_window = MS_DAY # 24 horas para fazer atualizacoes
     BETA = 0.2
     clicked = set()
 
-
+    #verifica se tem ou nao o grafo baixado e usa ou faz e salva
     if os.path.exists(path_simple_graph_timeWindow):
         G = load_graph(path_simple_graph_timeWindow)
     else:
@@ -126,31 +123,39 @@ if __name__ == "__main__":
         print(f"funcao users_items_itertuples demorou {fim - inicio} segundos")
         save_graph(G, path_simple_graph_timeWindow)
 
-    timestamps = sorted(data['timestamp']
-                    for u, v, data in G.edges(data=True)
-                    if 'timestamp' in data)
+    # esse jeito é melhor de leitura e mais rapido
+    timestamps = sorted(nx.get_edge_attributes(G, "timestamp").values())
     
     ts_begin = min(timestamps)
     ts_end = max(timestamps)
-    current_time = ts_begin + time_window # já começa com dados
+    current_time = ts_begin + time_window # já comeca com uma janela de dados
     
     iteracao = 0
+    # se o tempo for maior que o do ultimo click do dataset ele para
     while current_time <= ts_end:
-        print(f"ITERACAO: {iteracao}")
+        print(f"\nITERACAO: {iteracao}")
         iteracao+=1
+        print(f"tempo atual: {pd.to_datetime(current_time, unit='ms')}")
+
+        # constroi o subgrafo mesmo se o user-alvo nao estiver nele
         inicio = time.perf_counter()
         sub = build_subGraph(G, current_time, time_window)
         fim = time.perf_counter()
         print(f"Demorou {fim - inicio} segundos para montar o subgrafo")
 
+        # se o user n tiver no subgrafo, da erro, caso queira alocar recomendacoes pra ele mesmo nao estando em sessao, obrigar a colcaor user no subgrafo
         if(USER_ID not in sub):
-            current_time += MS_DAY
+            current_time += time_window
             continue
         
+        # tempo para dar atualizar os clicks (quase o mesmo tempo de montar o subgrafo (erra por milesimos))
+        incio = time.perf_counter()
         update_clicked(sub, clicked, USER_ID, current_time)
+        fim = time.perf_counter()
+        print(f"demorou {fim - inicio} segundos para atualizar clicked")
         print(clicked)
 
-        #executa rwr no grafo mais simples (users + items)
+        #executa rwr
         inicio = time.perf_counter()
         recomendacoes = recommend_with_rwr_timeWindow(sub, clicked, USER_ID, TOP_K, BETA)
         fim = time.perf_counter()
@@ -158,8 +163,8 @@ if __name__ == "__main__":
         timestamp_readable = pd.to_datetime(current_time, unit='ms')
         print(f"[{timestamp_readable}] Recomendações para {USER_ID}")
         for artigo, score in recomendacoes:
-            print(f"\tArtigo {artigo} — score: {score}")
+            print(f"\tArtigo {artigo} --- score: {score}")
         print(f"funcao rwr demorou {fim - inicio} segundos")
 
-        current_time += MS_DAY  #avanca dia a dia
-
+        #pula pra proxima janela de tempo
+        current_time += time_window  #de acordo com a janela de tempo
