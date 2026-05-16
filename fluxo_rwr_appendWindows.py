@@ -5,134 +5,23 @@ import glob
 import os
 import sys
 import time
-import pickle
+import logging
+from models_and_save_graphs import existing_file, users_items, users_sessions_items, devices_users_sessions_items, devices_users_sessions_items_regions 
 
-def save_graph(G, path):
-    with open(path, 'wb') as f:
-        pickle.dump(G, f)
-        print(f"Grafo salvo em {path}")
+#deixei umas config global aq, mais facil
+USER_ID = "u_1709"
+TOP_KS = [5, 10, 15, 20]
+MS_DAY = 1000 * 60 * 60 * 24  # 1 dia em timestamp
+TIME_WINDOW = MS_DAY * 2 # 2 dias para fazer atualizacoes
+BETAS = [0.1, 0.15, 0.2, 0.25, 0.3]
+MIN_CLIQUES = 1000
+TS_CUTOFF = int(pd.Timestamp('2017-10-18').timestamp() * 1000)
 
-def load_graph(path):
-    with open(path, 'rb') as f:
-        G = pickle.load(f)
-        print(f"Grafo carregado {G}")
-        return G
-
-def users_items_itertuples(arquivos):
-    G = nx.Graph()
-
-    # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
-    for arquivo in arquivos:
-        # talvez mudar o tipo da variavel para ocupar menos espaco n seja interessante nesse metodo, pq eh apagado a cada evz
-        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp'], dtype={'user_id': 'uint64', 'click_article_id': 'uint64'})
-
-        #itertuples é mais rápido que interrows
-        for row in df.itertuples():
-            user = f"u_{row.user_id}"
-            item = f"i_{row.click_article_id}"
-            ts = row.click_timestamp
-
-            G.add_node(user, subset=0, tipo="user")
-            G.add_node(item, subset=1, tipo="item")
-            # coloca como atributo da aresta para que o timestamp seja atribuido a interação e nao ao item
-            G.add_edge(user, item, timestamp=ts)
-
-        del df
-    print(G)
-    return G
-
-def users_sessions_items(arquivos):
-    G = nx.Graph()
-
-    # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
-    for arquivo in arquivos:
-        # talvez mudar o tipo da variavel para ocupar menos espaco n seja interessante nesse metodo, pq eh apagado a cada evz
-        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp', 'session_id', 'session_start'])
-
-        #itertuples é mais rápido que interrows
-        for row in df.itertuples():
-            user = f"u_{row.user_id}"
-            item = f"i_{row.click_article_id}"
-            session = f"s_{row.session_id}"
-            ts = row.click_timestamp
-            ts_session_start = row.session_start
-
-            G.add_node(user, tipo="user")
-            G.add_node(item, tipo="item")
-            G.add_node(session, tipo="session")
-            # coloca como atributo da aresta para que o timestamp seja atribuido a interação e nao ao item
-            G.add_edge(user, session, timestamp=ts_session_start)
-            G.add_edge(session, item, timestamp=ts)
-
-        del df
-    print(G)
-    return G
-
-def devices_users_sessions_items(arquivos):
-    G = nx.Graph()
-
-    # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
-    for arquivo in arquivos:
-        # talvez mudar o tipo da variavel para ocupar menos espaco n seja interessante nesse metodo, pq eh apagado a cada evz
-        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp', 'session_id', 'session_start', 'click_deviceGroup'])
-
-        #itertuples é mais rápido que interrows
-        for row in df.itertuples():
-            device = f"d_{row.click_deviceGroup}"
-            user = f"u_{row.user_id}"
-            item = f"i_{row.click_article_id}"
-            session = f"s_{row.session_id}"
-            ts = row.click_timestamp
-            ts_session_start = row.session_start
-
-            G.add_node(device, tipo="device")
-            G.add_node(user, tipo="user")
-            G.add_node(session, tipo="session")
-            G.add_node(item, tipo="item")
-            # coloca como atributo da aresta para que o timestamp seja atribuido a interação e nao ao item
-            G.add_edge(session, device)
-            G.add_edge(user, session, timestamp=ts_session_start)
-            G.add_edge(session, item, timestamp=ts)
-
-        del df
-    print(G)
-    return G
-
-def devices_users_sessions_items_regions(arquivos):
-    G = nx.Graph()
-
-    # usando dtype para diminuir o uso de memória, pq por padrão o pandas usa um valor maior
-    for arquivo in arquivos:
-        # talvez mudar o tipo da variavel para ocupar menos espaco n seja interessante nesse metodo, pq eh apagado a cada evz
-        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp', 'session_id', 'session_start', 'click_deviceGroup', 'click_region'])
-
-        #itertuples é mais rápido que interrows
-        for row in df.itertuples():
-            device = f"d_{row.click_deviceGroup}"
-            user = f"u_{row.user_id}"
-            item = f"i_{row.click_article_id}"
-            session = f"s_{row.session_id}"
-            region = f"r_{row.click_region}"
-            ts = row.click_timestamp
-            ts_session_start = row.session_start
-
-            G.add_node(region, tipo="region")
-            G.add_node(device, tipo="device")
-            G.add_node(user, tipo="user")
-            G.add_node(session, tipo="session")
-            G.add_node(item, tipo="item")
-            # coloca como atributo da aresta para que o timestamp seja atribuido a interação e nao ao item
-            G.add_edge(region, user)
-            G.add_edge(session, device)
-            G.add_edge(user, session, timestamp=ts_session_start)
-            G.add_edge(session, item, timestamp=ts)
-
-        del df
-    print(G)
-    return G
-
-"""pelo o que eu vi, esse é o melhor jeito de se fazer pq ocupa menos espaco e eh mais rapido
-tinha feito um jeito antes que criava um grafo novo, mas ficava mais demorado e tals"""
+"""
+=============================================================================================
+FUNCAO DE CRIAR SUBGRAFO PELO TIMESTAMP
+=============================================================================================
+"""
 def build_subGraph(G: Graph, current_time):
     selectedEdges = [(u, v) for u, v, data in G.edges(data=True)
                      if data.get('timestamp', 0) <= current_time]
@@ -141,8 +30,11 @@ def build_subGraph(G: Graph, current_time):
 
     return sub_graph
 
-"""pelo o que eu vi, esse é o melhor jeito de se fazer pq ocupa menos espaco e eh mais rapido
-o jeito comentado criava um grafo novo, o que demora mais tempo"""
+"""
+=============================================================================================
+FUNCAO DAR ATUALIZAR ITENS CLICADOS
+=============================================================================================
+"""
 def update_clicked(G: Graph, clicked, user_id):
     # target_user_neighbors = list(G.neighbors(user_id))
     # is_session = any(G.nodes[v].get('tipo') == 'session' for v in target_user_neighbors)
@@ -169,7 +61,11 @@ def update_clicked(G: Graph, clicked, user_id):
                 if G.nodes[candidate].get('tipo') == 'item':
                     clicked.add(candidate)
 
-
+"""
+=============================================================================================
+FUNCAO RwR
+=============================================================================================
+"""
 def recommend_with_rwr_timeWindow(G: Graph, clicked, user_id, top_k, beta):
     if(user_id not in G):
         print("user not found")
@@ -190,36 +86,126 @@ def recommend_with_rwr_timeWindow(G: Graph, clicked, user_id, top_k, beta):
     recommendations.sort(key=lambda x: x[1], reverse=True)
     return recommendations[:top_k]
 
+"""
+=============================================================================================
+FUNCAO PRECISION + NGCG
+=============================================================================================
+"""
+def precision_topK(recommended, relevants):
+    if not recommended or not relevants:
+        return 0
+    recommended_items = set(item for item, _ in recommended)
+    return len(recommended_items & relevants) / len(recommended_items)
 
-def verify_existing(files, path, function):
-    #verifica se tem ou nao o grafo baixado e usa ou faz e salva
-    if os.path.exists(path):
-        G = load_graph(path)
-    else:
-        #execucao com liberacao de memoria
-        inicio = time.perf_counter()
-        G = function(files)
-        fim = time.perf_counter()
-        print(f"funcao de criar grafo demorou {fim - inicio} segundos")
-        save_graph(G, path)
+def ndcg_topK(recommended, relevants):
+    if not recommended or not relevants:
+        return 0
+    
+    dcg = 0.0
+    for i, (item, _) in enumerate(recommended):
+        if item in relevants:
+            dcg += 1 / (i + 2)  # log2(posição + 1), posição começa em 1
 
-    return G
+    # ideal DCG — todos os acertos no topo da lista
+    ideal_hits = min(len(relevants), len(recommended))
+    idcg = sum(1 / (i + 2) for i in range(ideal_hits))
 
+    return dcg / idcg if idcg > 0 else 0.0
+
+def execute_hiper(G, USER_ID, BETAS, TOP_KS, ts_begin, ts_end, time_window):
+    results = []
+    total_combinations = len(BETAS) * len(TOP_KS)
+    current_combination = 0
+    for beta in BETAS:
+        for topK in TOP_KS:
+            clicked = set()
+            current_combination += 1
+            current_time = ts_begin + time_window
+
+            log.info(f"[{current_combination}/{total_combinations}] beta={beta} | top_k={topK}")
+
+            precisions = []
+            ndcgs = []
+
+            iteracao = 0
+            # se o tempo for maior que o do ultimo click do dataset ele para
+            while current_time <= ts_end:
+                print(f"\nITERACAO: {iteracao}")
+                iteracao+=1
+                timestamp_readable = pd.to_datetime(current_time, unit='ms')
+                print(f"tempo atual: {timestamp_readable}")
+
+                # constroi o subgrafo mesmo se o user-alvo nao estiver nele
+                inicio = time.perf_counter()
+                current_sub = build_subGraph(G, current_time)
+                future_sub = build_subGraph(G, current_time + time_window)
+                fim = time.perf_counter()
+                print(current_sub)
+                print(future_sub)
+                print(f"Demorou {fim - inicio} segundos para montar os subgrafos")
+
+                # se o user n tiver no subgrafo, da erro, caso queira alocar recomendacoes pra ele mesmo nao estando em sessao, obrigar a colcaor user no subgrafo
+                if(USER_ID not in current_sub):
+                    current_time += time_window
+                    continue
+
+                future_clicked = set()
+                if USER_ID in future_sub:
+                    update_clicked(future_sub, future_clicked, USER_ID)
+                
+                update_clicked(current_sub, clicked, USER_ID)
+                print(clicked)
+
+                relevants = future_clicked - clicked
+
+                #executa rwr
+                inicio = time.perf_counter()
+                recommended = recommend_with_rwr_timeWindow(current_sub, clicked, USER_ID, topK, beta)
+                fim = time.perf_counter()
+
+                print(f"[{timestamp_readable}] Recomendações para {USER_ID}")
+                for artigo, score in recommended:
+                    print(f"\tArtigo {artigo} --- score: {score}")
+                print(f"funcao rwr demorou {fim - inicio} segundos")
+
+                if relevants:
+                    precisions.append(precision_topK(recommended, relevants))
+                    ndcgs.append(ndcg_topK(recommended, relevants))
+
+                #pula pra proxima janela de tempo
+                current_time += time_window  #de acordo com a janela de tempo
+
+            mean_precision = sum(precisions) / len(precisions) if precisions else 0
+            mean_ndcg = sum(ndcgs) / len(ndcgs) if ndcgs else 0
+
+            log.info(f"\tPrecision@{topK}: {mean_precision} | nDCG{topK}: {mean_ndcg}")
+            results.append((beta, topK, mean_precision, mean_ndcg))
+
+    results.sort(key=lambda x: x[3], reverse=True)
+    log.info(f"\n{'='*60}")
+    log.info("RANKING DE HIPERPARÂMETROS (por nDCG):")
+    print(f"{'='*60}")
+    log.info(f"{'beta':<8} {'top_k':<8} {'P@K':<10} {'nDCG@K'}")
+    print(f"{'-'*50}")
+    for beta, top_k, p, n in results:
+        log.info(f"{beta:<8} {top_k:<8} {p:<10.4f} {n:.4f}")
+    best = results[0]
+    log.info(f"\nMelhor configuração: beta={best[0]}, top_k={best[1]}")
+    log.info(f"  Precision@K={best[2]:.4f} | nDCG@K={best[3]:.4f}")
+    return best
+
+"""
+=============================================================================================
+FUNCAO MAIN (FAZ O CONTROLE DE TUDO)
+=============================================================================================
+"""
 if __name__ == "__main__":
-    path_simple_graph_timeWindow = '/home/jaba/Documentos/TCC/grafo_simples_timewindow'
-    path_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafo_users_sessions_items_timeWindow'
-    path_user_sessions_devices_items_timeWindow = '/home/jaba/Documentos/TCC/grafo_users_sessions_devices_items_timeWindow'
-    path_complete_graph_timeWindow = '/home/jaba/Documentos/TCC/grafo_completo_timeWindow'
+    path_simple_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_simples_timewindow'
+    path_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_users_sessions_items_timeWindow'
+    path_user_sessions_devices_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_users_sessions_devices_items_timeWindow'
+    path_complete_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_completo_timeWindow'
     folder = '/home/jaba/Documentos/TCC/clicks'
     files = glob.glob(os.path.join(folder, "*.csv"))
-
-    #deixei umas config global aq, mais facil
-    USER_ID = "u_0"
-    TOP_K = 10
-    MS_DAY = 1000 * 60 * 60 * 24  # 1 dia em timestamp
-    time_window = MS_DAY * 2 # 2 dias para fazer atualizacoes
-    BETA = 0.15
-    clicked = set()
 
     print("1 - grafo users + items")
     print("2 - grafo users + sessions + items")
@@ -227,15 +213,27 @@ if __name__ == "__main__":
     print("4 - grafo regions + users + sessions + devices + items")
     choice = int(input("escolha qual grafo deseja funfar\n"))
 
+    graph_name = {1: 'users_items', 2: 'users_sessions_items', 3: 'devices_users_sessions_items', 4: 'devices_users_sessions_regions_items'}[choice]
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s — %(message)s',
+        handlers=[
+            logging.FileHandler(f'/home/jaba/Documentos/TCC/resultados/log_{graph_name}.log', encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+    log = logging.getLogger()
+
     match choice:
         case 1:
-            G = verify_existing(files, path_simple_graph_timeWindow, users_items_itertuples)
+            G = existing_file(files, path_simple_graph_timeWindow, users_items)
         case 2:
-            G = verify_existing(files, path_user_sessions_items_timeWindow, users_sessions_items)
+            G = existing_file(files, path_user_sessions_items_timeWindow, users_sessions_items)
         case 3:
-            G = verify_existing(files, path_user_sessions_devices_items_timeWindow, devices_users_sessions_items)
+            G = existing_file(files, path_user_sessions_devices_items_timeWindow, devices_users_sessions_items)
         case 4:
-            G = verify_existing(files, path_complete_graph_timeWindow, devices_users_sessions_items_regions)
+            G = existing_file(files, path_complete_graph_timeWindow, devices_users_sessions_items_regions)
         case _:
             print("escolheu errado tonhao")
 
@@ -243,44 +241,6 @@ if __name__ == "__main__":
     timestamps = sorted(nx.get_edge_attributes(G, "timestamp").values())
     ts_begin = min(timestamps)
     ts_end = max(timestamps)
-    current_time = ts_begin + time_window # já comeca com uma janela de dados
+    current_time = ts_begin + TIME_WINDOW # já comeca com uma janela de dados
     
-    iteracao = 0
-    # se o tempo for maior que o do ultimo click do dataset ele para
-    while current_time <= ts_end:
-        print(f"\nITERACAO: {iteracao}")
-        iteracao+=1
-        print(f"tempo atual: {pd.to_datetime(current_time, unit='ms')}")
-
-        # constroi o subgrafo mesmo se o user-alvo nao estiver nele
-        inicio = time.perf_counter()
-        sub = build_subGraph(G, current_time)
-        print(sub)
-        fim = time.perf_counter()
-        print(f"Demorou {fim - inicio} segundos para montar o subgrafo")
-
-        # se o user n tiver no subgrafo, da erro, caso queira alocar recomendacoes pra ele mesmo nao estando em sessao, obrigar a colcaor user no subgrafo
-        if(USER_ID not in sub):
-            current_time += time_window
-            continue
-        
-        # tempo para dar atualizar os clicks (quase o mesmo tempo de montar o subgrafo (erra por milesimos))
-        inicio = time.perf_counter()
-        update_clicked(sub, clicked, USER_ID)
-        fim = time.perf_counter()
-        print(f"demorou {fim - inicio} segundos para atualizar clicked")
-        print(clicked)
-
-        #executa rwr
-        inicio = time.perf_counter()
-        recomendacoes = recommend_with_rwr_timeWindow(sub, clicked, USER_ID, TOP_K, BETA)
-        fim = time.perf_counter()
-
-        timestamp_readable = pd.to_datetime(current_time, unit='ms')
-        print(f"[{timestamp_readable}] Recomendações para {USER_ID}")
-        for artigo, score in recomendacoes:
-            print(f"\tArtigo {artigo} --- score: {score}")
-        print(f"funcao rwr demorou {fim - inicio} segundos")
-
-        #pula pra proxima janela de tempo
-        current_time += time_window  #de acordo com a janela de tempo
+    execute_hiper(G, USER_ID, BETAS, TOP_KS, ts_begin, ts_end, TIME_WINDOW)
