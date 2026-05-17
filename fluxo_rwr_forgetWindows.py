@@ -67,13 +67,14 @@ def update_clicked(G: Graph, clicked):
     #         if G.nodes[neighbors].get('tipo') == 'item':
     #             clicked.add(neighbors)
 
-
     for neighbor in G.neighbors(USER_ID):
-        if ITEM_OFFSET <= neighbor < SESSION_OFFSET:
+        tipo = G.nodes[neighbor].get('tipo')
+
+        if tipo == ITEM:
             clicked.add(neighbor)
-        elif SESSION_OFFSET <= neighbor < REGION_OFFSET:
+        elif tipo == SESSION:
             for candidate in G.neighbors(neighbor):
-                if ITEM_OFFSET <= candidate < SESSION_OFFSET:
+                if G.nodes[candidate].get('tipo') == ITEM:
                     clicked.add(candidate)
 
 """
