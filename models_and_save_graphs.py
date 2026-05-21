@@ -4,7 +4,7 @@ import time
 import networkx as nx
 import pandas as pd
 
-TS_CUTOFF = int(pd.Timestamp('2017-10-18').timestamp() * 1000)
+TS_CUTOFF = int(pd.Timestamp('2017-10-17').timestamp() * 1000)
 USER = 0
 ITEM = 1
 SESSION = 2
@@ -16,6 +16,9 @@ ITEM_OFFSET = 2_000_000_000
 SESSION_OFFSET = 3_000_000_000
 REGION_OFFSET = 4_000_000_000
 DEVICE_OFFSET = 5_000_000_000
+
+# nao esta havendo duplicacao, fui burro, esqueci que diminui os dias do tataset, desse jeito tem menos nos
+# colocar valores grandes ainda eh mais prefereivel que string
 
 """
 =============================================================================================
@@ -62,6 +65,7 @@ def users_items(arquivos):
         df = pd.read_csv(arquivo,
             usecols=['user_id', 'click_article_id', 'click_timestamp'])
         dfs.append(df)
+        del df
 
     df_total = pd.concat(dfs, ignore_index=True)
     df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
