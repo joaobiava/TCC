@@ -6,7 +6,7 @@ import sys
 import time
 import logging
 from model_iGraph import (existing_file, users_items, users_sessions_items, 
-                                    devices_users_sessions_items, devices_users_sessions_items_regions, 
+                                    regions_users_sessions_items, devices_users_sessions_items_regions, 
                                     USER, USER_OFFSET, ITEM, ITEM_OFFSET, SESSION, SESSION_OFFSET, 
                                     DEVICE, DEVICE_OFFSET, REGION, REGION_OFFSET, TS_CUTOFF)
 import math
@@ -17,7 +17,7 @@ import random
 TOP_KS = 20
 MS_DAY = 1000 * 60 * 60 * 24  # 1 dia em timestamp
 TIME_WINDOW = MS_DAY * 2 # 2 dias para fazer atualizacoes
-BETAS = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
+ALFAS = [0.1, 0.15, 0.2]
 NUM_PASSEIOS = 5000
 tempoMaximo = 500
 
@@ -43,22 +43,25 @@ def update_clicked(G, clicked, user_idx):
                 if G.vs[candidate]['tipo'] == ITEM:
                     clicked.add(candidate)
 
-def recommend_with_rwr(G, clicked, user_index, beta):
+def recommend_with_rwr(G, clicked, user_index, alfa):
     if G.degree(user_index) == 0:
         return []
     
+    user_sessions = [neighbor for neighbor in G.neighbors(user_index) if G.vs[neighbor]['tipo'] == SESSION]
+    restart_nodes = user_sessions if user_sessions else [user_index]
+
     # Dicionário para contabilizar as visitas a cada vértice
     contagem_visitas = {}
 
     inicio = time.perf_counter()
     for _ in range(NUM_PASSEIOS):
-        no_atual = user_index
+        no_atual = random.choice(restart_nodes)
 
-        while random.random() > beta:
-            vizinhos = G.neighbors(no_atual)
+        while random.random() > alfa:
+            vizinhos = list(G.neighbors(no_atual))
 
             if not vizinhos:
-                no_atual = user_index
+                no_atual = random.choice(restart_nodes)
                 continue
             
             # Sorteia um vizinho aleatoriamente
@@ -75,16 +78,13 @@ def recommend_with_rwr(G, clicked, user_index, beta):
 
     recommendations = []
     
-    # CORREÇÃO: Usa no_idx no lugar de no_atual
     for no_idx, visitas in contagem_visitas.items():
-        if visitas > 0:
-            if no_idx not in clicked:
-                recommendations.append((no_idx, visitas))
+        if visitas > 0 and no_idx not in clicked:
+            recommendations.append((no_idx, visitas))
 
     if not recommendations:
         return []
 
-    # Ordena os itens mais visitados e retorna os top-k
     recommendations.sort(key=lambda x: x[1], reverse=True)
     return recommendations[:TOP_KS]
 
@@ -110,7 +110,7 @@ def ndcg_topK(recommended, relevants):
 
     return dcg / len(relevants)
 
-def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps_only, beta):
+def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps_only, alfa):
     all_precisions = []
     all_ndcgs = []
 
@@ -151,7 +151,7 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
                 continue
 
             # inicio = time.perf_counter()
-            recommended = recommend_with_rwr(current_sub, clicked, user_index, beta)
+            recommended = recommend_with_rwr(current_sub, clicked, user_index, alfa)
             # fim = time.perf_counter()
 
             # user_name = G.vs[user_index]['name']
@@ -165,11 +165,12 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
             all_precisions.append(p)
             all_ndcgs.append(n)
 
+        log.info("Interrompendo após a primeira janela para fins de teste.")
+        break
+    
         current_time += TIME_WINDOW
         current_sub = future_sub
 
-        log.info("Interrompendo após a primeira janela para fins de teste.")
-        break
 
     return all_precisions, all_ndcgs
 
@@ -199,34 +200,34 @@ def execute_hiperparams(G, ts_begin, ts_end, all_users):
     # Gera o índice de tempo uma única vez (Perfeito!)
     edges_by_time, timestamps_only = create_time_index(G)
     
-    for beta in BETAS:
-        log.info(f"Iniciando simulação para beta={beta}")
+    for alfa in ALFAS:
+        log.info(f"Iniciando simulação para alfa={alfa}")
 
         # Executa a janela de tempo. 
-        precisions, ndcgs = execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps_only, beta)
+        precisions, ndcgs = execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps_only, alfa)
 
         # Calcula a média direto das listas retornadas (Sem redundância)
         mean_precision = sum(precisions) / len(precisions) if precisions else 0
         mean_ndcg = sum(ndcgs) / len(ndcgs) if ndcgs else 0
 
-        results.append((beta, TOP_KS, mean_precision, mean_ndcg))
-        log.info(f"Resultado parcial: beta={beta} | P@K={mean_precision:.4f} | nDCG={mean_ndcg:.4f}")
+        results.append((alfa, TOP_KS, mean_precision, mean_ndcg))
+        log.info(f"Resultado parcial: alfa={alfa} | P@K={mean_precision:.4f} | nDCG={mean_ndcg:.4f}")
 
     # Ordena o ranking final pelo nDCG (índice 3 do tuplo)
     results.sort(key=lambda x: x[3], reverse=True)
     
-    # --- Print do Log e Ranking ---
+    # Print do Log e Ranking
     print("\n" + "="*60)
     log.info("RANKING DE HIPERPARÂMETROS (por nDCG):")
     print("="*60)
-    log.info(f"{'beta':<8} {'top_k':<8} {'P@K':<10} {'nDCG@K'}")
+    log.info(f"{'alfa':<8} {'top_k':<8} {'P@K':<10} {'nDCG@K'}")
     print(f"{'-'*50}")
-    for beta, top_k, p, n in results:
-        log.info(f"{beta:<8} {top_k:<8} {p:<10.4f} {n:.4f}")
+    for alfa, top_k, p, n in results:
+        log.info(f"{alfa:<8} {top_k:<8} {p:<10.4f} {n:.4f}")
         
     best = results[0]
     print(f"\n" + "="*60)
-    log.info(f"Melhor configuração: beta={best[0]}, top_k={best[1]}")
+    log.info(f"Melhor configuração: alfa={best[0]}, top_k={best[1]}")
     log.info(f"  Precision@K={best[2]:.4f} | nDCG@K={best[3]:.4f}")
     print("="*60)
     
@@ -241,18 +242,18 @@ FUNCAO MAIN
 if __name__ == "__main__":
     path_simple_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_simples_timewindow'
     path_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_users_sessions_items_timeWindow'
-    path_user_sessions_devices_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_users_sessions_devices_items_timeWindow'
+    path_regions_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_regions_users_sessions_items_timeWindow'
     path_complete_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_completo_timeWindow'
     folder = '/home/jaba/Documentos/TCC/clicks'
     files = glob.glob(os.path.join(folder, "*.csv"))
 
     print("1 - grafo users + items")
     print("2 - grafo users + sessions + items")
-    print("3 - grafo users + sessions + devices + items")
+    print("3 - grafo regions + users + sessions + items")
     print("4 - grafo regions + users + sessions + devices + items")
     choice = int(input("escolha qual grafo deseja funfar\n"))
 
-    graph_name = {1: 'foget_users_items_allUsers', 2: 'foget_users_sessions_items_allUsers', 3: 'foget_devices_users_sessions_items_allUsers', 4: 'foget_devices_users_sessions_regions_items_allUsers'}[choice]
+    graph_name = {1: 'foget_users_items_allUsers', 2: 'foget_users_sessions_items_allUsers', 3: 'foget_regions_users_sessions_items_allUsers', 4: 'foget_devices_users_sessions_regions_items_allUsers'}[choice]
 
     logging.basicConfig(
         level=logging.INFO,
@@ -270,11 +271,11 @@ if __name__ == "__main__":
         case 2:
             G = existing_file(files, path_user_sessions_items_timeWindow, users_sessions_items)
         case 3:
-            G = existing_file(files, path_user_sessions_devices_items_timeWindow, devices_users_sessions_items)
+            G = existing_file(files, path_regions_user_sessions_items_timeWindow, regions_users_sessions_items)
         case 4:
             G = existing_file(files, path_complete_graph_timeWindow, devices_users_sessions_items_regions)
         case _:
-            print("escolheu errado tonhao")
+            print("opcao invalida")
 
     # Coleta de timestamps a partir da sequência de arestas do iGraph (.es)
     timestamps = sorted([ts for ts in G.es['timestamp'] if ts is not None])
