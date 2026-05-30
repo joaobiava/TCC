@@ -141,12 +141,12 @@ def users_sessions_items(arquivos):
     print(G.summary())
     return G
 
-def devices_users_sessions_items(arquivos):
+def regions_users_sessions_items(arquivos):
     G = ig.Graph()
     dfs = []
 
     for arquivo in arquivos:
-        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp', 'session_id', 'session_start', 'click_deviceGroup'])
+        df = pd.read_csv(arquivo, usecols=['user_id', 'click_article_id', 'click_timestamp', 'session_id', 'session_start', 'click_region'])
         dfs.append(df)
         del df
 
@@ -159,20 +159,20 @@ def devices_users_sessions_items(arquivos):
     timestamps = []
 
     for row in df_total.itertuples():
-        device = row.click_deviceGroup + DEVICE_OFFSET
+        region = row.click_region + REGION_OFFSET
         user = row.user_id + USER_OFFSET
         item = row.click_article_id + ITEM_OFFSET
         session = row.session_id + SESSION_OFFSET
         ts = row.click_timestamp
         ts_session_start = row.session_start
 
-        if device not in nos_dict: nos_dict[device] = DEVICE
+        if region not in nos_dict: nos_dict[region] = REGION
         if user not in nos_dict: nos_dict[user] = USER
         if session not in nos_dict: nos_dict[session] = SESSION
         if item not in nos_dict: nos_dict[item] = ITEM
 
         # Aresta session -> device (sem timestamp no seu original, usamos None ou 0)
-        arestas.append((session, device))
+        arestas.append((user, region))
         timestamps.append(None) 
         
         # Aresta user -> session
