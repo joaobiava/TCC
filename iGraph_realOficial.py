@@ -43,12 +43,29 @@ def update_clicked(G, clicked, user_idx):
                 if G.vs[candidate]['tipo'] == ITEM:
                     clicked.add(candidate)
 
-def recommend_with_rwr(G, clicked, user_index, alfa):
-    if G.degree(user_index) == 0:
+def recommend_with_rwr(current_sub, clicked, user_index, alfa):
+    if current_sub.degree(user_index) == 0:
         return []
     
-    user_sessions = [neighbor for neighbor in G.neighbors(user_index) if G.vs[neighbor]['tipo'] == SESSION]
-    restart_nodes = user_sessions if user_sessions else [user_index]
+    user_sessions = [neighbor for neighbor in current_sub.neighbors(user_index) if current_sub.vs[neighbor]['tipo'] == SESSION]
+
+    if user_sessions:
+        maior_timestamp = 0
+        last_session = None
+        
+        for sessao in user_sessions:
+            aresta_id = current_sub.get_eid(user_index, sessao, directed=False)
+            # 2. Pega o timestamp dessa aresta
+            timestamp_atual = current_sub.es[aresta_id]['timestamp']
+            
+            if timestamp_atual > maior_timestamp:
+                maior_timestamp = timestamp_atual
+                last_session = sessao
+                
+        restart_nodes = [last_session]
+    else:
+        restart_nodes = [user_index]
+        
 
     # Dicionário para contabilizar as visitas a cada vértice
     contagem_visitas = {}
@@ -58,7 +75,7 @@ def recommend_with_rwr(G, clicked, user_index, alfa):
         no_atual = random.choice(restart_nodes)
 
         while random.random() > alfa:
-            vizinhos = list(G.neighbors(no_atual))
+            vizinhos = list(current_sub.neighbors(no_atual))
 
             if not vizinhos:
                 no_atual = random.choice(restart_nodes)
@@ -68,7 +85,7 @@ def recommend_with_rwr(G, clicked, user_index, alfa):
             no_atual = random.choice(vizinhos)
 
             # CORREÇÃO: Garante que APENAS itens entram no dicionário
-            if G.vs[no_atual]['tipo'] == ITEM:
+            if current_sub.vs[no_atual]['tipo'] == ITEM:
                 # Se não existir, inicia com 0 e soma 1. Se existir, soma 1.
                 contagem_visitas[no_atual] = contagem_visitas.get(no_atual, 0) + 1
 
@@ -120,20 +137,25 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
         user_index: set()
         for user_index in all_users
     }
-
+    inicio = time.perf_counter()
     current_sub = build_subGraph(G, edges_by_time, timestamps_only, current_time)
+    fim = time.perf_counter()
+    print(f"Demorou {fim - inicio}s para montar o subgrafo da janela atual")
 
     while current_time <= ts_end:
+        inicio = time.perf_counter()
         future_sub = build_subGraph(G, edges_by_time, timestamps_only, current_time + TIME_WINDOW)
+        fim = time.perf_counter()
+        print(f"Demorou {fim - inicio}s para montar o subgrafo da janela futura")
 
         timestamp_readable = pd.to_datetime(current_time, unit='ms')
         log.info("="*60)
         log.info(f"JANELA: {timestamp_readable}")
         log.info("="*60)
 
-        current_users = {u for u in all_users if current_sub.degree(u) > 0}
+        current_users = [u for u in all_users if current_sub.degree(u) > 0]
         future_users = {u for u in all_users if future_sub.degree(u) > 0}
-        valid_users = current_users & future_users
+        valid_users = [u for u in current_users if u in future_users]
 
         for user in current_users:
             clicked = clicked_per_user[user]
@@ -150,17 +172,17 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
             if not relevants:
                 continue
 
-            # inicio = time.perf_counter()
+            inicio = time.perf_counter()
             recommended = recommend_with_rwr(current_sub, clicked, user_index, alfa)
-            # fim = time.perf_counter()
+            fim = time.perf_counter()
 
-            # user_name = G.vs[user_index]['name']
-            # print(f"[USER] {user_name} tempo decorrido do RwR: {fim-inicio}")
+            user_name = G.vs[user_index]['name']
+            print(f"[USER] {user_name} tempo decorrido do RwR: {fim-inicio}")
 
             p = precision_topK(recommended, relevants)
             n = ndcg_topK(recommended, relevants)
 
-            # print(f"precision={p} | nDCG={n}")
+            print(f"precision={p} | nDCG={n}")
 
             all_precisions.append(p)
             all_ndcgs.append(n)
@@ -240,11 +262,11 @@ FUNCAO MAIN
 =============================================================================================
 """
 if __name__ == "__main__":
-    path_simple_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_simples_timewindow'
-    path_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_users_sessions_items_timeWindow'
-    path_regions_user_sessions_items_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_regions_users_sessions_items_timeWindow'
-    path_complete_graph_timeWindow = '/home/jaba/Documentos/TCC/grafos/grafo_completo_timeWindow'
-    folder = '/home/jaba/Documentos/TCC/clicks'
+    path_simple_graph_timeWindow = './grafos/grafo_simples_timewindow'
+    path_user_sessions_items_timeWindow = './grafos/grafo_users_sessions_items_timeWindow'
+    path_regions_user_sessions_items_timeWindow = './grafos/grafo_regions_users_sessions_items_timeWindow'
+    path_complete_graph_timeWindow = './grafos/grafo_completo_timeWindow'
+    folder = './clicks'
     files = glob.glob(os.path.join(folder, "*.csv"))
 
     print("1 - grafo users + items")
@@ -259,7 +281,7 @@ if __name__ == "__main__":
         level=logging.INFO,
         format='%(asctime)s — %(message)s',
         handlers=[
-            logging.FileHandler(f'/home/jaba/Documentos/TCC/resultados/log_{graph_name}.log', encoding='utf-8'),
+            logging.FileHandler(f'./resultados/log_{graph_name}.log', encoding='utf-8'),
             logging.StreamHandler()
         ]
     )
