@@ -59,8 +59,9 @@ def users_items(arquivos):
         del df
 
     df_total = pd.concat(dfs, ignore_index=True)
-    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
     del dfs
+    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
+    df_total = df_total.sort_values(by='click_timestamp').reset_index(drop=True)
 
     # Listas para acumular os dados e inseri-los em lote (MUITO mais rápido no iGraph)
     nos_dict = {}
@@ -104,8 +105,9 @@ def users_sessions_items(arquivos):
         del df
     
     df_total = pd.concat(dfs, ignore_index=True)
-    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
     del dfs
+    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
+    df_total = df_total.sort_values(by='click_timestamp').reset_index(drop=True)
 
     nos_dict = {}
     arestas = []
@@ -151,8 +153,9 @@ def regions_users_sessions_items(arquivos):
         del df
 
     df_total = pd.concat(dfs, ignore_index=True)
-    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
     del dfs
+    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
+    df_total = df_total.sort_values(by='click_timestamp').reset_index(drop=True)
 
     nos_dict = {}
     arestas = []
@@ -203,8 +206,9 @@ def devices_users_sessions_items_regions(arquivos):
         del df
 
     df_total = pd.concat(dfs, ignore_index=True)
-    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
     del dfs
+    df_total = df_total[df_total['click_timestamp'] < TS_CUTOFF]
+    df_total = df_total.sort_values(by='click_timestamp').reset_index(drop=True)
 
     nos_dict = {}
     arestas = []
