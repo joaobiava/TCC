@@ -17,7 +17,7 @@ import random
 TOP_KS = 20
 MS_DAY = 1000 * 60 * 60 * 24  # 1 dia em timestamp
 TIME_WINDOW = MS_DAY * 2 # 2 dias para fazer atualizacoes
-ALFAS = [0.1, 0.15, 0.2]
+ALFAS = [0.15]
 NUM_PASSEIOS = 5000
 tempoMaximo = 500
 
@@ -47,20 +47,21 @@ def recommend_with_rwr(current_sub, clicked, user_index, alfa):
     if current_sub.degree(user_index) == 0:
         return []
     
-    user_sessions = [neighbor for neighbor in current_sub.neighbors(user_index) if current_sub.vs[neighbor]['tipo'] == SESSION]
+    # fazer dessa forma nao deixar criar duplicatas das sessoes, ercorrerendo menos vezes do loop. E como o foco é apenas pegar qual foi a ultima sessao, nao afeta em nada
+    user_sessions = list(set(neighbor for neighbor in current_sub.neighbors(user_index) if current_sub.vs[neighbor]['tipo'] == SESSION))
 
     if user_sessions:
         maior_timestamp = 0
         last_session = None
         
-        for sessao in user_sessions:
-            aresta_id = current_sub.get_eid(user_index, sessao, directed=False)
-            # 2. Pega o timestamp dessa aresta
+        # percorre as sesoes pra ver qual a ultima acessada na janela de tempo
+        for session in user_sessions:
+            aresta_id = current_sub.get_eid(user_index, session, directed=False)
             timestamp_atual = current_sub.es[aresta_id]['timestamp']
             
             if timestamp_atual > maior_timestamp:
                 maior_timestamp = timestamp_atual
-                last_session = sessao
+                last_session = session
                 
         restart_nodes = [last_session]
     else:
@@ -161,6 +162,9 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
             clicked = clicked_per_user[user]
             update_clicked(current_sub, clicked, user)
 
+        window_precisions = []
+        window_ndcgs = []
+
         for user_index in valid_users:
             clicked = clicked_per_user[user_index]
             future_clicked = set()
@@ -172,27 +176,33 @@ def execute_timeWindow(G, all_users, ts_begin, ts_end, edges_by_time, timestamps
             if not relevants:
                 continue
 
-            inicio = time.perf_counter()
+            # inicio = time.perf_counter()
             recommended = recommend_with_rwr(current_sub, clicked, user_index, alfa)
-            fim = time.perf_counter()
+            # fim = time.perf_counter()
 
-            user_name = G.vs[user_index]['name']
-            print(f"[USER] {user_name} tempo decorrido do RwR: {fim-inicio}")
+            # user_name = G.vs[user_index]['name']
+            # print(f"[USER] {user_name} tempo decorrido do RwR: {fim-inicio}")
 
             p = precision_topK(recommended, relevants)
             n = ndcg_topK(recommended, relevants)
 
-            print(f"precision={p} | nDCG={n}")
+            window_precisions.append(p)
+            window_ndcgs.append(n)
+
+            # print(f"precision={p} | nDCG={n}")
 
             all_precisions.append(p)
             all_ndcgs.append(n)
 
-        log.info("Interrompendo após a primeira janela para fins de teste.")
-        break
+        log.info("-"*60)
+        window_mean_p = sum(window_precisions) / len(window_precisions)
+        window_mean_n = sum(window_ndcgs) / len(window_ndcgs)
+        log.info(f"RESUMO DA JANELA: {timestamp_readable}")
+        log.info(f"  P@K parcial: {window_mean_p:.4f} | nDCG@K parcial: {window_mean_n:.4f}")
+        log.info("="*60 + "\n")
     
         current_time += TIME_WINDOW
         current_sub = future_sub
-
 
     return all_precisions, all_ndcgs
 
